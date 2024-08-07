@@ -6,65 +6,72 @@ Conditions:
 - Pre-build Linux applications such as ls, mkdir, etc, and pre-build functions like
 system(), popen() should not be used in your application  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
+typedef struct Node {
+    char directory[1024];
+    struct Node* next;
+} Node;
 
-#define MAX_DIRS 100
-#define MAX_PATH_LEN 1024
+Node* head = NULL;
 
-char *dir_stack[MAX_DIRS];
-int top = -1;
+void pushd(const char* dir) {
+    Node* new_node = (Node*)malloc(sizeof(Node));
+    if (new_node == NULL) {
+        perror("Failed to allocate memory");
+        exit(EXIT_FAILURE);
+    }
 
-void pushd(const char *dir) {
-    if (top >= MAX_DIRS - 1) {
-        fprintf(stderr, "Directory stack overflow\n");
-        return;
+    if (realpath(dir, new_node->directory) == NULL) {
+        perror("Invalid directory");
+        free(new_node);
+        exit(EXIT_FAILURE);
     }
-    char *cwd = (char *)malloc(MAX_PATH_LEN);
-    if (getcwd(cwd, MAX_PATH_LEN) == NULL) {
-        perror("getcwd");
-        free(cwd);
-        return;
+
+    new_node->next = head;
+    head = new_node;
+
+    if (chdir(new_node->directory) != 0) {
+        perror("Failed to change directory");
+        exit(EXIT_FAILURE);
     }
-    dir_stack[++top] = cwd;
-    if (chdir(dir) != 0) {
-        perror("chdir");
-        top--;
-        free(cwd);
-    }
+
+    printf("Directory pushed: %s\n", new_node->directory);
 }
 
 void popd() {
-    if (top < 0) {
-        fprintf(stderr, "Directory stack underflow\n");
+    if (head == NULL) {
+        fprintf(stderr, "Directory stack is empty\n");
         return;
     }
-    char *dir = dir_stack[top--];
-    if (chdir(dir) != 0) {
-        perror("chdir");
+
+    Node* temp = head;
+    head = head->next;
+
+    if (chdir(head != NULL ? head->directory : getenv("HOME")) != 0) {
+        perror("Failed to change directory");
+        exit(EXIT_FAILURE);
     }
-    free(dir);
+
+    printf("Directory popped: %s\n", temp->directory);
+    free(temp);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <command> [directory]\n", argv[0]);
-        return 1;
+        fprintf(stderr, "Usage: %s [pushd <dir> | popd]\n", argv[0]);
+        exit(EXIT_FAILURE);
     }
 
     if (strcmp(argv[1], "pushd") == 0) {
         if (argc != 3) {
-            fprintf(stderr, "Usage: %s pushd <directory>\n", argv[0]);
-            return 1;
+            fprintf(stderr, "Usage: %s pushd <dir>\n", argv[0]);
+            exit(EXIT_FAILURE);
         }
         pushd(argv[2]);
     } else if (strcmp(argv[1], "popd") == 0) {
         popd();
     } else {
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
     return 0;
